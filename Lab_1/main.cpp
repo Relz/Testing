@@ -50,5 +50,10 @@ int wmain(int argc, wchar_t *argv[])
 		PrintError(L"Длины треугольника должны быть числами");
 		return 1;
 	}
+	if (a < 0 || b < 0 || c < 0)
+	{
+		PrintError(L"Длины треугольника должны быть положительными числами");
+		return 1;
+	}
 	return 0;
 }
