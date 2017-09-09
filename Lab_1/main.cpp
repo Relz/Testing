@@ -70,5 +70,10 @@ int wmain(int argc, wchar_t *argv[])
 		wcout << L"Равносторонний";
 		return 0;
 	}
+	if (a == b || b == c || a == c)
+	{
+		wcout << L"Равнобедренный";
+		return 0;
+	}
 	return 0;
 }
