@@ -15,6 +15,14 @@ void UseUTF16()
 	_setmode(_fileno(stderr), _O_U16TEXT);
 }
 
+void LoadArgumentsToStringStream(wstringstream & stringStream, wchar_t *argv[], int argCount)
+{
+	for (int i = 1; i < argCount; ++i)
+	{
+		stringStream << wstring(argv[i]) << L" ";
+	}
+}
+
 int wmain(int argc, wchar_t *argv[])
 {
 	UseUTF16();
@@ -23,5 +31,7 @@ int wmain(int argc, wchar_t *argv[])
 		PrintError(L"Укажите длины сторон в качестве параметров. Формат ввода: triangle.exe a b c");
 		return 1;
 	}
+	wstringstream stringStream;
+	LoadArgumentsToStringStream(stringStream, argv, ARG_COUNT);
 	return 0;
 }
