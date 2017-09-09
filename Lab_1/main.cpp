@@ -60,5 +60,10 @@ int wmain(int argc, wchar_t *argv[])
 		PrintError(L"Не треугольник");
 		return 0;
 	}
+	if (a != b && b != c && a != c)
+	{
+		wcout << L"Обычный";
+		return 0;
+	}
 	return 0;
 }
