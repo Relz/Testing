@@ -23,6 +23,15 @@ void LoadArgumentsToStringStream(wstringstream & stringStream, wchar_t *argv[], 
 	}
 }
 
+bool GetTriangleLengths(wstringstream & stringStream, double &a, double &b, double &c)
+{
+	if (stringStream >> a >> b >> c)
+	{
+		return true;
+	}
+	return false;
+}
+
 int wmain(int argc, wchar_t *argv[])
 {
 	UseUTF16();
@@ -33,5 +42,13 @@ int wmain(int argc, wchar_t *argv[])
 	}
 	wstringstream stringStream;
 	LoadArgumentsToStringStream(stringStream, argv, ARG_COUNT);
+	double a = 0;
+	double b = 0;
+	double c = 0;
+	if (!GetTriangleLengths(stringStream, a, b, c))
+	{
+		PrintError(L"Длины треугольника должны быть числами");
+		return 1;
+	}
 	return 0;
 }
