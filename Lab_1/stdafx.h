@@ -5,3 +5,4 @@
 #include <io.h>
 #include <fcntl.h>
 #include <sstream>
+#include <limits>
