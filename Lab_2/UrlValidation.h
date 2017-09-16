@@ -1,3 +1,4 @@
 #pragma once
+using namespace std;
 
-bool ValidateURL(const wstring & url);
+bool ValidateURL(const string & url);

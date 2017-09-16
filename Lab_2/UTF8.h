@@ -1,3 +1,3 @@
 #pragma once
 
-void UseUTF8();
+std::wstring ToUTF8(const std::string & str);

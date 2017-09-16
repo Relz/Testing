@@ -1,94 +1,79 @@
 ﻿#include "stdafx.h"
-#include "UrlValidation.h"
+#include "Print.h"
 using namespace std;
 
-void PrintError(const wstring msg)
+bool DoesUrlContainsColonAndSlashesOnce(const string & url)
 {
-	wcout << L"Ошибка: " << msg << L"\n";
-}
-
-bool DoesUrlContainsColonAndSlashesOnce(const wstring & url)
-{
-	wsmatch match;
-	regex_search(url, match, wregex(L"://"));
+	smatch match;
+	regex_search(url, match, regex("://"));
 	return match.size() == 1;
 }
 
-bool ValidProtocol(const wstring & url)
+bool ValidProtocol(const string & url)
 {
-	return regex_search(url, wregex(L"^https?:"));
+	return regex_search(url, regex("^https?:"));
 }
 
-bool DoesUrlContainsDomainZone(const wstring & url)
+bool DoesUrlContainsDomainZone(const string & url)
 {
-	return regex_search(url, wregex(L"[.].+$"));
+	return regex_search(url, regex("[.].+$"));
 }
 
-bool DoesUrlContainsDomainName(const wstring & url)
+bool DoesUrlContainsDomainName(const string & url)
 {
-	return regex_search(url, wregex(L"://.+[.]"));
+	return regex_search(url, regex("://.+[.]"));
 }
 
-bool DoesUrlContainsDoubleDot(const wstring & url)
+bool DoesUrlContainsDoubleDot(const string & url)
 {
-	return regex_search(url, wregex(L"[.][.]"));
+	return regex_search(url, regex("[.][.]"));
 }
 
-bool DoesUrlContainsDotInEnd(const wstring & url)
+bool DoesUrlContainsDotInEnd(const string & url)
 {
-	return regex_search(url, wregex(L"[.]$"));
+	return regex_search(url, regex("[.]$"));
 }
 
-bool DoesUrlContainsEmptySubdomain(const wstring & url)
+bool DoesUrlContainsEmptySubdomain(const string & url)
 {
-	return regex_search(url, wregex(L"://[.]"));
+	return regex_search(url, regex("://[.]"));
 }
 
-bool DoesDomainContainsOnlyAllowedCharacters(const wstring & url)
-{
-	return regex_search(url, wregex(L"://[A-Za-z0-9-_.~]+(\\?)|(/)"));
-}
-
-bool ValidateURL(const wstring & url)
+bool ValidateURL(const string & url)
 {
 	if (!DoesUrlContainsColonAndSlashesOnce(url))
 	{
-		PrintError(L"Неверный URL. После протокола должно следовать двоеточие с двумя косыми чертами");
+		PrintlnError(u8"Неверный URL. После протокола должно следовать двоеточие с двумя косыми чертами");
 		return false;
 	}
 	if (!ValidProtocol(url))
 	{
-		PrintError(L"Неверный протокол. Доступны два протокола: http и https");
+		PrintlnError(u8"Неверный протокол. Доступны два протокола: http и https");
 		return false;
 	}
 	if (!DoesUrlContainsDomainZone(url))
 	{
-		PrintError(L"Неверный URL. Не указана доменная зона");
+		PrintlnError(u8"Неверный URL. Не указана доменная зона");
 		return false;
 	}
 	if (!DoesUrlContainsDomainName(url))
 	{
-		PrintError(L"Неверный URL. Не указано доменное имя");
+		PrintlnError(u8"Неверный URL. Не указано доменное имя");
 		return false;
 	}
 	if (DoesUrlContainsDoubleDot(url))
 	{
-		PrintError(L"Неверный URL. Две точки не могут следовать друг за другом");
+		PrintlnError(u8"Неверный URL. Две точки не могут следовать друг за другом");
 		return false;
 	}
 	if (DoesUrlContainsDotInEnd(url))
 	{
-		PrintError(L"Неверный URL. Точка не может заканчивать ссылку веб-страницы");
+		PrintlnError(u8"Неверный URL. Точка не может заканчивать ссылку веб-страницы");
 		return false;
 	}
 	if (DoesUrlContainsEmptySubdomain(url))
 	{
-		PrintError(L"Неверный URL. Домен третьего уровня не может являться пустой строкой");
-		return false;
-	}
-	if (!DoesDomainContainsOnlyAllowedCharacters(url))
-	{
-		PrintError(L"Неверный URL. Разрешённые символы домена: A-Z, a-z, 0-9, -, _, ., ~");
+		PrintlnError(u8"Неверный URL. Домен третьего уровня не может являться пустой строкой");
 		return false;
 	}
 	return true;

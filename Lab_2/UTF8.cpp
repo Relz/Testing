@@ -1,8 +1,8 @@
 #include "stdafx.h"
-#include "UTF16.h"
 
-void UseUTF8()
+std::wstring ToUTF8(const std::string & str)
 {
-	_setmode(_fileno(stdout), _O_U8TEXT);
-	_setmode(_fileno(stdin), _O_U8TEXT);
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+	std::wstringstream strm(converter.from_bytes(str));
+	return strm.str();
 }
