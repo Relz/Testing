@@ -1,5 +1,5 @@
 #pragma once
-using namespace std;
 
-void Println(const string & msg);
-void PrintlnError(const string & msg);
+void Println(const std::string & msg);
+void Println(const std::string & msg, std::wofstream & outFile);
+void PrintlnError(const std::string & msg);

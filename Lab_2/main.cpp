@@ -38,6 +38,76 @@ void GetHrefs(const string & html, const function<void(const sregex_iterator &)>
 	}
 }
 
+bool GetUrl(const string & href, string & url)
+{
+	bool result = false;
+	smatch resultWithQuotes;
+	if (regex_search(href, resultWithQuotes, regex("[\"'].+?[\"']")))
+	{
+		result = true;
+	}
+	url = resultWithQuotes.str();
+	url.erase(url.begin());
+	url.erase(--url.end());
+	return result;
+}
+
+void CompleteFullURL(const string & sourceUrl, string & url)
+{
+	if (sourceUrl[sourceUrl.size() - 1] != '/' && url[0] != '/')
+	{
+		url = sourceUrl + '/' + url;
+	}
+	else
+	{
+		if (sourceUrl[sourceUrl.size() - 1] == '/' && url[0] == '/')
+		{
+			url.erase(url.begin());
+		}
+		url = sourceUrl + url;
+	}
+}
+
+long GetResponseCode(CURL **curl)
+{
+	long responseCode;
+	curl_easy_getinfo(*curl, CURLINFO_RESPONSE_CODE, &responseCode);
+
+	return responseCode;
+}
+
+bool ProcessURL(CURL **curl, const string & sourceUrl, wofstream & urlsStatus, wofstream & badUrls)
+{
+	char errorBuffer[CURL_ERROR_SIZE];
+	string html;
+	if (GetHtml(curl, sourceUrl, html, errorBuffer) != CURLE_OK)
+	{
+		PrintlnError(to_string(GetResponseCode(curl)));
+		PrintlnError(errorBuffer);
+		return false;
+	}
+	Println(to_string(GetResponseCode(curl)), urlsStatus);
+
+	vector<string> urls;
+	GetHrefs(html, [&sourceUrl, &urls](const sregex_iterator & it) {
+		string url;
+		if (!GetUrl(it->str(), url) || DoesUrlContainsColonAndSlashesOnce(url))
+		{
+			return;
+		}
+		if (url.find(sourceUrl) == string::npos)
+		{
+			CompleteFullURL(sourceUrl, url);
+		}
+		urls.push_back(url);
+	});
+	for (const string & url : urls)
+	{
+		cout << url << "\n";
+	}
+	return true;
+}
+
 int main(int argc, char *argv[])
 {
 	setlocale(LC_ALL, "Russian");
@@ -58,16 +128,13 @@ int main(int argc, char *argv[])
 		PrintlnError(u8"Не удалось инициализировать библиотеку для работы с сетью");
 		return 1;
 	}
-	char errorBuffer[CURL_ERROR_SIZE];
-	string html;
-	if (GetHtml(&curl, sourceUrl, html, errorBuffer) != CURLE_OK)
+	wofstream urlsStatus("urls_status.txt");
+	wofstream badUrls("bad_urls.txt");
+	
+	if (!ProcessURL(&curl, sourceUrl, urlsStatus, badUrls))
 	{
-		PrintlnError(errorBuffer);
 		return 1;
 	}
-	GetHrefs(html, [](const sregex_iterator & it) {
-		cout << it->str() << "\n";
-	});
 
 	return 0;
 }

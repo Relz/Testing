@@ -8,3 +8,4 @@
 #include <sstream>
 #include <curl/curl.h>
 #include <functional>
+#include <fstream>
