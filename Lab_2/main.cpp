@@ -146,11 +146,13 @@ bool ProcessURL(
 		return false;
 	}
 	long responseCode = GetResponseCode(curl);
+	string responseCodeStr = to_string(responseCode);
 	if (responseCode != 200)
 	{
-		Println(currentUrl + u8" : " + to_string(responseCode), badUrls);
+		Println(currentUrl + u8" : " + responseCodeStr, badUrls);
 	}
-	Println(currentUrl + u8" : " + to_string(responseCode), urlsStatus);
+	Println(currentUrl + u8" : " + responseCodeStr, urlsStatus);
+	Println(u8"Код ответа: " + responseCodeStr);
 
 	Println(u8"Получение внутренних ссылок страницы");
 	GetHrefs(html, [&sourceUrl, &currentUrl, &processedUrls, &queue](const sregex_iterator & it) {
