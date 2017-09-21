@@ -9,3 +9,5 @@
 #include <curl/curl.h>
 #include <functional>
 #include <fstream>
+#include <unordered_set>
+#include <queue>

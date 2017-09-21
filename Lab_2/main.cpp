@@ -6,6 +6,12 @@ using namespace std;
 
 const int ARG_COUNT = 2;
 
+struct HrefUrlParts
+{
+	string path;
+	string fileName;
+};
+
 static int Writer(char *data, size_t size, size_t nmemb, string *buffer)
 {
 	int result = 0;
@@ -31,7 +37,7 @@ CURLcode GetHtml(CURL ** curl, const string & sourceUrl, const string & html, ch
 
 void GetHrefs(const string & html, const function<void(const sregex_iterator &)> & callback)
 {
-	regex re("href=[\"'].+?[\"']");
+	regex re("href[ ]*=[ ]*[\"'].*?[\"']");
 	for (auto it = sregex_iterator(html.begin(), html.end(), re); it != sregex_iterator(); ++it)
 	{
 		callback(it);
@@ -42,7 +48,7 @@ bool GetUrl(const string & href, string & url)
 {
 	bool result = false;
 	smatch resultWithQuotes;
-	if (regex_search(href, resultWithQuotes, regex("[\"'].+?[\"']")))
+	if (regex_search(href, resultWithQuotes, regex("[\"'].*?[\"']")))
 	{
 		result = true;
 	}
@@ -52,20 +58,63 @@ bool GetUrl(const string & href, string & url)
 	return result;
 }
 
-void CompleteFullURL(const string & sourceUrl, string & url)
+bool GetFileName(const string & url, string & fileName)
 {
-	if (sourceUrl[sourceUrl.size() - 1] != '/' && url[0] != '/')
+	bool result = false;
+	smatch fileNameMatch;
+	if (regex_search(url, fileNameMatch, regex("[^/]+$")))
 	{
-		url = sourceUrl + '/' + url;
+		result = true;
+	}
+	fileName = fileNameMatch.str();
+	if (fileName[0] == '/')
+	{
+		fileName.erase(fileName.begin());
+	}
+	return result;
+}
+
+bool GetPath(const string & url, string & path)
+{
+	bool result = false;
+	smatch pathMatch;
+	if (regex_search(url, pathMatch, regex("(\$/.*?/)[^/]*?\.\S*")))
+	{
+		result = true;
+	}
+	path = pathMatch.str();
+	if (path[0] != '/')
+	{
+		path.insert(path.begin(), '/');
+	}
+	if (path[path.size() - 1] != '/')
+	{
+		path.push_back('/');
+	}
+	return result;
+}
+
+void CompleteFullURL(const string & sourceUrl, const string & currentUrl, string & url)
+{
+	const string & rootUrl = (url[0] == '/') ? sourceUrl : currentUrl;
+	if (rootUrl[rootUrl.size() - 1] != '/' && url[0] != '/')
+	{
+		url = rootUrl + '/' + url;
 	}
 	else
 	{
-		if (sourceUrl[sourceUrl.size() - 1] == '/' && url[0] == '/')
+		if (rootUrl[rootUrl.size() - 1] == '/' && url[0] == '/')
 		{
 			url.erase(url.begin());
 		}
-		url = sourceUrl + url;
+		url = rootUrl + url;
 	}
+}
+
+void GetHrefUrlParts(const string & url, HrefUrlParts & hrefUrlParts)
+{
+	GetFileName(url, hrefUrlParts.fileName);
+	GetPath(url, hrefUrlParts.path);
 }
 
 long GetResponseCode(CURL **curl)
@@ -76,35 +125,50 @@ long GetResponseCode(CURL **curl)
 	return responseCode;
 }
 
-bool ProcessURL(CURL **curl, const string & sourceUrl, wofstream & urlsStatus, wofstream & badUrls)
+bool ProcessURL(
+	CURL **curl,
+	const string & sourceUrl,
+	const HrefUrlParts & hrefUrlParts,
+	wofstream & urlsStatus,
+	wofstream & badUrls,
+	queue<HrefUrlParts> & queue,
+	unordered_set<string> & processedUrls)
 {
+	string currentUrl = sourceUrl + hrefUrlParts.path + hrefUrlParts.fileName;
+	Println(u8"----------");
+	Println(currentUrl);
+	Println(u8"Получение HTML кода страницы");
 	char errorBuffer[CURL_ERROR_SIZE];
 	string html;
-	if (GetHtml(curl, sourceUrl, html, errorBuffer) != CURLE_OK)
+	if (GetHtml(curl, currentUrl, html, errorBuffer) != CURLE_OK)
 	{
-		PrintlnError(to_string(GetResponseCode(curl)));
 		PrintlnError(errorBuffer);
 		return false;
 	}
-	Println(to_string(GetResponseCode(curl)), urlsStatus);
+	long responseCode = GetResponseCode(curl);
+	if (responseCode != 200)
+	{
+		Println(currentUrl + u8" : " + to_string(responseCode), badUrls);
+	}
+	Println(currentUrl + u8" : " + to_string(responseCode), urlsStatus);
 
-	vector<string> urls;
-	GetHrefs(html, [&sourceUrl, &urls](const sregex_iterator & it) {
+	Println(u8"Получение внутренних ссылок страницы");
+	GetHrefs(html, [&sourceUrl, &currentUrl, &processedUrls, &queue](const sregex_iterator & it) {
 		string url;
 		if (!GetUrl(it->str(), url) || DoesUrlContainsColonAndSlashesOnce(url))
 		{
 			return;
 		}
-		if (url.find(sourceUrl) == string::npos)
+		HrefUrlParts hrefUrlParts;
+		GetHrefUrlParts(url, hrefUrlParts);
+		url = sourceUrl + hrefUrlParts.path + hrefUrlParts.fileName;
+		if (processedUrls.find(url) == processedUrls.end())
 		{
-			CompleteFullURL(sourceUrl, url);
+			processedUrls.insert(url);
+			queue.push(hrefUrlParts);
 		}
-		urls.push_back(url);
 	});
-	for (const string & url : urls)
-	{
-		cout << url << "\n";
-	}
+	Println(u8"----------");
 	return true;
 }
 
@@ -121,6 +185,10 @@ int main(int argc, char *argv[])
 	{
 		return 1;
 	}
+	if (sourceUrl[sourceUrl.size() - 1] == '/')
+	{
+		sourceUrl.erase(--sourceUrl.end());
+	}
 	CURL *curl = curl_easy_init();
 
 	if (curl == nullptr)
@@ -131,9 +199,19 @@ int main(int argc, char *argv[])
 	wofstream urlsStatus("urls_status.txt");
 	wofstream badUrls("bad_urls.txt");
 	
-	if (!ProcessURL(&curl, sourceUrl, urlsStatus, badUrls))
+	HrefUrlParts hrefSourceUrlParts;
+	hrefSourceUrlParts.path = "/";
+
+	unordered_set<string> processedUrls;
+	processedUrls.insert(sourceUrl + hrefSourceUrlParts.path + hrefSourceUrlParts.fileName);
+
+	queue<HrefUrlParts> queue;
+	queue.push(hrefSourceUrlParts);
+	while (!queue.empty())
 	{
-		return 1;
+		HrefUrlParts currentHrefUrlParts = queue.front();
+		queue.pop();
+		ProcessURL(&curl, sourceUrl, currentHrefUrlParts, urlsStatus, badUrls, queue, processedUrls);
 	}
 
 	return 0;
