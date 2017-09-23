@@ -12,16 +12,14 @@ struct HrefUrlParts
 	string fileName;
 };
 
-static int Writer(char *data, size_t size, size_t nmemb, string *buffer)
+void CutProtocolFromUrl(string & sourceUrl, string & protocol)
 {
-	int result = 0;
-	if (buffer != NULL)
+	regex re("^https?://");
+	for (auto it = sregex_iterator(sourceUrl.begin(), sourceUrl.end(), re); it != sregex_iterator(); ++it)
 	{
-		buffer->append(data, size * nmemb);
-		result = size * nmemb;
+		protocol = it->str();
+		sourceUrl.erase(sourceUrl.begin(), sourceUrl.begin() + protocol.length());
 	}
-
-	return result;
 }
 
 CURLcode GetHtml(CURL ** curl, const string & sourceUrl, const string & html, char (&errorBuffer)[CURL_ERROR_SIZE])
@@ -30,7 +28,16 @@ CURLcode GetHtml(CURL ** curl, const string & sourceUrl, const string & html, ch
 	curl_easy_setopt(*curl, CURLOPT_URL, sourceUrl.c_str());
 	curl_easy_setopt(*curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(*curl, CURLOPT_HEADER, true);
-	curl_easy_setopt(*curl, CURLOPT_WRITEFUNCTION, Writer);
+	curl_easy_setopt(*curl, CURLOPT_WRITEFUNCTION, [](char *data, size_t size, size_t nmemb, string *buffer) -> int {
+		int result = 0;
+		if (buffer != NULL)
+		{
+			buffer->append(data, size * nmemb);
+			result = size * nmemb;
+		}
+
+		return result;
+	});
 	curl_easy_setopt(*curl, CURLOPT_WRITEDATA, &html);
 	return curl_easy_perform(*curl);
 }
@@ -127,14 +134,15 @@ long GetResponseCode(CURL **curl)
 
 bool ProcessURL(
 	CURL **curl,
-	const string & sourceUrl,
+	const string & protocol,
+	const string & sourceDomain,
 	const HrefUrlParts & hrefUrlParts,
 	wofstream & urlsStatus,
 	wofstream & badUrls,
 	queue<HrefUrlParts> & queue,
 	unordered_set<string> & processedUrls)
 {
-	string currentUrl = sourceUrl + hrefUrlParts.path + hrefUrlParts.fileName;
+	string currentUrl = sourceDomain + hrefUrlParts.path + hrefUrlParts.fileName;
 	Println(u8"----------");
 	Println(currentUrl);
 	Println(u8"Получение HTML кода страницы");
@@ -155,7 +163,7 @@ bool ProcessURL(
 	Println(u8"Код ответа: " + responseCodeStr);
 
 	Println(u8"Получение внутренних ссылок страницы");
-	GetHrefs(html, [&sourceUrl, &currentUrl, &processedUrls, &queue](const sregex_iterator & it) {
+	GetHrefs(html, [&sourceDomain, &currentUrl, &processedUrls, &queue](const sregex_iterator & it) {
 		string url;
 		if (!GetUrl(it->str(), url) || DoesUrlContainsColonAndSlashesOnce(url))
 		{
@@ -163,7 +171,7 @@ bool ProcessURL(
 		}
 		HrefUrlParts hrefUrlParts;
 		GetHrefUrlParts(url, hrefUrlParts);
-		url = sourceUrl + hrefUrlParts.path + hrefUrlParts.fileName;
+		url = sourceDomain + hrefUrlParts.path + hrefUrlParts.fileName;
 		if (processedUrls.find(url) == processedUrls.end())
 		{
 			processedUrls.insert(url);
@@ -191,6 +199,10 @@ int main(int argc, char *argv[])
 	{
 		sourceUrl.erase(--sourceUrl.end());
 	}
+	string protocol;
+	CutProtocolFromUrl(sourceUrl, protocol);
+	string & domainName = sourceUrl;
+
 	CURL *curl = curl_easy_init();
 
 	if (curl == nullptr)
@@ -205,7 +217,7 @@ int main(int argc, char *argv[])
 	hrefSourceUrlParts.path = "/";
 
 	unordered_set<string> processedUrls;
-	processedUrls.insert(sourceUrl + hrefSourceUrlParts.path + hrefSourceUrlParts.fileName);
+	processedUrls.insert(domainName + hrefSourceUrlParts.path + hrefSourceUrlParts.fileName);
 
 	queue<HrefUrlParts> queue;
 	queue.push(hrefSourceUrlParts);
@@ -213,7 +225,7 @@ int main(int argc, char *argv[])
 	{
 		HrefUrlParts currentHrefUrlParts = queue.front();
 		queue.pop();
-		ProcessURL(&curl, sourceUrl, currentHrefUrlParts, urlsStatus, badUrls, queue, processedUrls);
+		ProcessURL(&curl, protocol, domainName, currentHrefUrlParts, urlsStatus, badUrls, queue, processedUrls);
 	}
 
 	return 0;
