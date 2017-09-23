@@ -7,6 +7,20 @@ using namespace std;
 
 const int ARG_COUNT = 2;
 
+string GetDMYDateTimeString(struct tm *now)
+{
+	return to_string(now->tm_mday) + "." + to_string(now->tm_mon + 1) + "." + to_string(now->tm_year + 1900) + "/"
+		+ to_string(now->tm_hour) + ":" + to_string(now->tm_min) + ":" + to_string(now->tm_sec);
+}
+
+void PrintInfoToFile(size_t urlCount, struct tm *now, wofstream & outFile)
+{
+	Print(u8"Количество ссылок: ", outFile);
+	Println(to_string(urlCount), outFile);
+	Print(u8"Дата/время завершения проверки: ", outFile);
+	Println(GetDMYDateTimeString(now), outFile);
+}
+
 static int Writer(char *data, size_t size, size_t nmemb, string *buffer) {
 	int result = 0;
 	if (buffer != NULL)
@@ -71,7 +85,9 @@ bool ProcessUrl(
 	wofstream & urlsStatus,
 	wofstream & badUrls,
 	queue<CUrlParts*> & queue,
-	unordered_set<string> & processedUrls)
+	unordered_set<string> & processedUrls,
+	size_t & totalUrlCount,
+	size_t & badUrlCount)
 {
 	string currentFullUrl;
 	CUrlParts::CreateFullUrl(currentUrlParts, currentFullUrl);
@@ -89,8 +105,10 @@ bool ProcessUrl(
 	string responseCodeStr = to_string(responseCode);
 	if (responseCode != 200)
 	{
+		++badUrlCount;
 		Println(currentFullUrl + u8" : " + responseCodeStr, badUrls);
 	}
+	++totalUrlCount;
 	Println(currentFullUrl + u8" : " + responseCodeStr, urlsStatus);
 	Println(u8"Код ответа: " + responseCodeStr);
 
@@ -167,14 +185,21 @@ int main(int argc, char *argv[])
 	unordered_set<string> processedUrls;
 	processedUrls.insert(fullUrl);
 
+	size_t totalUrlCount = 0;
+	size_t badUrlCount = 0;
 	queue<CUrlParts*> queue;
 	queue.push(sourceUrlParts);
 	while (!queue.empty())
 	{
 		CUrlParts *currentUrlParts = queue.front();
 		queue.pop();
-		ProcessUrl(&curl, *currentUrlParts, urlsStatus, badUrls, queue, processedUrls);
+		ProcessUrl(&curl, *currentUrlParts, urlsStatus, badUrls, queue, processedUrls, totalUrlCount, badUrlCount);
 	}
+
+	time_t currentTime = time(0);
+	struct tm *now = localtime(&currentTime);
+	PrintInfoToFile(totalUrlCount, now, urlsStatus);
+	PrintInfoToFile(badUrlCount, now, badUrls);
 
 	return 0;
 }
