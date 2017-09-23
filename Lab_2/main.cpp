@@ -2,42 +2,29 @@
 #include "UTF8.h"
 #include "UrlValidation.h"
 #include "Print.h"
+#include "UrlParts.h"
 using namespace std;
 
 const int ARG_COUNT = 2;
 
-struct HrefUrlParts
-{
-	string path;
-	string fileName;
-};
-
-void CutProtocolFromUrl(string & sourceUrl, string & protocol)
-{
-	regex re("^https?://");
-	for (auto it = sregex_iterator(sourceUrl.begin(), sourceUrl.end(), re); it != sregex_iterator(); ++it)
+static int Writer(char *data, size_t size, size_t nmemb, string *buffer) {
+	int result = 0;
+	if (buffer != NULL)
 	{
-		protocol = it->str();
-		sourceUrl.erase(sourceUrl.begin(), sourceUrl.begin() + protocol.length());
+		buffer->append(data, size * nmemb);
+		result = size * nmemb;
 	}
+
+	return result;
 }
 
-CURLcode GetHtml(CURL ** curl, const string & sourceUrl, const string & html, char (&errorBuffer)[CURL_ERROR_SIZE])
+CURLcode GetHtml(CURL **curl, const string & url, const string & html, char (&errorBuffer)[CURL_ERROR_SIZE])
 {
 	curl_easy_setopt(*curl, CURLOPT_ERRORBUFFER, errorBuffer);
-	curl_easy_setopt(*curl, CURLOPT_URL, sourceUrl.c_str());
+	curl_easy_setopt(*curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(*curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(*curl, CURLOPT_HEADER, true);
-	curl_easy_setopt(*curl, CURLOPT_WRITEFUNCTION, [](char *data, size_t size, size_t nmemb, string *buffer) -> int {
-		int result = 0;
-		if (buffer != NULL)
-		{
-			buffer->append(data, size * nmemb);
-			result = size * nmemb;
-		}
-
-		return result;
-	});
+	curl_easy_setopt(*curl, CURLOPT_WRITEFUNCTION, Writer);
 	curl_easy_setopt(*curl, CURLOPT_WRITEDATA, &html);
 	return curl_easy_perform(*curl);
 }
@@ -65,65 +52,6 @@ bool GetUrl(const string & href, string & url)
 	return result;
 }
 
-bool GetFileName(const string & url, string & fileName)
-{
-	bool result = false;
-	smatch fileNameMatch;
-	if (regex_search(url, fileNameMatch, regex("[^/]+$")))
-	{
-		result = true;
-	}
-	fileName = fileNameMatch.str();
-	if (fileName[0] == '/')
-	{
-		fileName.erase(fileName.begin());
-	}
-	return result;
-}
-
-bool GetPath(const string & url, string & path)
-{
-	bool result = false;
-	smatch pathMatch;
-	if (regex_search(url, pathMatch, regex("(\$/.*?/)[^/]*?\.\S*")))
-	{
-		result = true;
-	}
-	path = pathMatch.str();
-	if (path[0] != '/')
-	{
-		path.insert(path.begin(), '/');
-	}
-	if (path[path.size() - 1] != '/')
-	{
-		path.push_back('/');
-	}
-	return result;
-}
-
-void CompleteFullURL(const string & sourceUrl, const string & currentUrl, string & url)
-{
-	const string & rootUrl = (url[0] == '/') ? sourceUrl : currentUrl;
-	if (rootUrl[rootUrl.size() - 1] != '/' && url[0] != '/')
-	{
-		url = rootUrl + '/' + url;
-	}
-	else
-	{
-		if (rootUrl[rootUrl.size() - 1] == '/' && url[0] == '/')
-		{
-			url.erase(url.begin());
-		}
-		url = rootUrl + url;
-	}
-}
-
-void GetHrefUrlParts(const string & url, HrefUrlParts & hrefUrlParts)
-{
-	GetFileName(url, hrefUrlParts.fileName);
-	GetPath(url, hrefUrlParts.path);
-}
-
 long GetResponseCode(CURL **curl)
 {
 	long responseCode;
@@ -132,23 +60,27 @@ long GetResponseCode(CURL **curl)
 	return responseCode;
 }
 
-bool ProcessURL(
+bool UrlContainsMailtoOrTel(const string & url)
+{
+	return regex_search(url, smatch(), regex("^mailto:")) || regex_search(url, smatch(), regex("^tel:"));
+}
+
+bool ProcessUrl(
 	CURL **curl,
-	const string & protocol,
-	const string & sourceDomain,
-	const HrefUrlParts & hrefUrlParts,
+	const CUrlParts & currentUrlParts,
 	wofstream & urlsStatus,
 	wofstream & badUrls,
-	queue<HrefUrlParts> & queue,
+	queue<CUrlParts*> & queue,
 	unordered_set<string> & processedUrls)
 {
-	string currentUrl = sourceDomain + hrefUrlParts.path + hrefUrlParts.fileName;
+	string currentFullUrl;
+	CUrlParts::CreateFullUrl(currentUrlParts, currentFullUrl);
 	Println(u8"----------");
-	Println(currentUrl);
+	Println(currentFullUrl);
 	Println(u8"Получение HTML кода страницы");
 	char errorBuffer[CURL_ERROR_SIZE];
 	string html;
-	if (GetHtml(curl, currentUrl, html, errorBuffer) != CURLE_OK)
+	if (GetHtml(curl, currentFullUrl, html, errorBuffer) != CURLE_OK)
 	{
 		PrintlnError(errorBuffer);
 		return false;
@@ -157,27 +89,50 @@ bool ProcessURL(
 	string responseCodeStr = to_string(responseCode);
 	if (responseCode != 200)
 	{
-		Println(currentUrl + u8" : " + responseCodeStr, badUrls);
+		Println(currentFullUrl + u8" : " + responseCodeStr, badUrls);
 	}
-	Println(currentUrl + u8" : " + responseCodeStr, urlsStatus);
+	Println(currentFullUrl + u8" : " + responseCodeStr, urlsStatus);
 	Println(u8"Код ответа: " + responseCodeStr);
 
-	Println(u8"Получение внутренних ссылок страницы");
-	GetHrefs(html, [&sourceDomain, &currentUrl, &processedUrls, &queue](const sregex_iterator & it) {
+	Print(u8"Получение внутренних ссылок страницы: ");
+	size_t urlCount = 0;
+	GetHrefs(html, [&currentUrlParts, &processedUrls, &queue, &urlCount](const sregex_iterator & it) {
 		string url;
-		if (!GetUrl(it->str(), url) || DoesUrlContainsColonAndSlashesOnce(url))
+		if (!GetUrl(it->str(), url))
 		{
 			return;
 		}
-		HrefUrlParts hrefUrlParts;
-		GetHrefUrlParts(url, hrefUrlParts);
-		url = sourceDomain + hrefUrlParts.path + hrefUrlParts.fileName;
-		if (processedUrls.find(url) == processedUrls.end())
+		if (UrlContainsMailtoOrTel(url))
 		{
-			processedUrls.insert(url);
-			queue.push(hrefUrlParts);
+			return;
+		}
+		CUrlParts *urlParts = new CUrlParts(url);
+		if (urlParts->GetDomainName() != currentUrlParts.GetDomainName())
+		{
+			return;
+		}
+		if (urlParts->GetProtocol().empty())
+		{
+			urlParts->SetProtocol(currentUrlParts.GetProtocol());
+		}
+		if (urlParts->GetSubDomainName().empty())
+		{
+			urlParts->SetSubDomainName(currentUrlParts.GetSubDomainName());
+		}
+		if (urlParts->GetDomainName().empty())
+		{
+			urlParts->SetDomainName(currentUrlParts.GetDomainName());
+		}
+		string fullUrl;
+		CUrlParts::CreateFullUrl(*urlParts, fullUrl);
+		if (processedUrls.find(fullUrl) == processedUrls.end())
+		{
+			processedUrls.insert(fullUrl);
+			queue.push(urlParts);
+			++urlCount;
 		}
 	});
+	Println(to_string(urlCount));
 	Println(u8"----------");
 	return true;
 }
@@ -195,16 +150,8 @@ int main(int argc, char *argv[])
 	{
 		return 1;
 	}
-	if (sourceUrl[sourceUrl.size() - 1] == '/')
-	{
-		sourceUrl.erase(--sourceUrl.end());
-	}
-	string protocol;
-	CutProtocolFromUrl(sourceUrl, protocol);
-	string & domainName = sourceUrl;
 
 	CURL *curl = curl_easy_init();
-
 	if (curl == nullptr)
 	{
 		PrintlnError(u8"Не удалось инициализировать библиотеку для работы с сетью");
@@ -213,19 +160,20 @@ int main(int argc, char *argv[])
 	wofstream urlsStatus("urls_status.txt");
 	wofstream badUrls("bad_urls.txt");
 	
-	HrefUrlParts hrefSourceUrlParts;
-	hrefSourceUrlParts.path = "/";
+	CUrlParts *sourceUrlParts = new CUrlParts(sourceUrl);
+	string fullUrl;
+	CUrlParts::CreateFullUrl(*sourceUrlParts, fullUrl);
 
 	unordered_set<string> processedUrls;
-	processedUrls.insert(domainName + hrefSourceUrlParts.path + hrefSourceUrlParts.fileName);
+	processedUrls.insert(fullUrl);
 
-	queue<HrefUrlParts> queue;
-	queue.push(hrefSourceUrlParts);
+	queue<CUrlParts*> queue;
+	queue.push(sourceUrlParts);
 	while (!queue.empty())
 	{
-		HrefUrlParts currentHrefUrlParts = queue.front();
+		CUrlParts *currentUrlParts = queue.front();
 		queue.pop();
-		ProcessURL(&curl, protocol, domainName, currentHrefUrlParts, urlsStatus, badUrls, queue, processedUrls);
+		ProcessUrl(&curl, *currentUrlParts, urlsStatus, badUrls, queue, processedUrls);
 	}
 
 	return 0;
