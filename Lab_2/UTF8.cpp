@@ -14,3 +14,8 @@ std::wstring ToUTF8(const std::string & str)
 		return std::wstring();
 	}
 }
+
+void ToUTF8(std::wofstream & stream)
+{
+	stream.imbue(std::locale(std::locale::empty(), new std::codecvt_utf8<wchar_t, 0x10ffff, std::generate_header>));
+}
