@@ -175,8 +175,11 @@ int main(int argc, char *argv[])
 		PrintlnError(u8"Не удалось инициализировать библиотеку для работы с сетью");
 		return 1;
 	}
+
 	wofstream urlsStatus("urls_status.txt");
 	wofstream badUrls("bad_urls.txt");
+	ToUTF8(urlsStatus);
+	ToUTF8(badUrls);
 	
 	CUrlParts *sourceUrlParts = new CUrlParts(sourceUrl);
 	string fullUrl;
