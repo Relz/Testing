@@ -25,6 +25,7 @@ public:
 
 private:
 	static bool RemoveExtraSlashesInBeginning(std::string & url);
+	static void EscapeCharacters(std::string & str, size_t & escapedCharacterCount);
 
 	std::string _protocol;
 	std::string _subDomainName;

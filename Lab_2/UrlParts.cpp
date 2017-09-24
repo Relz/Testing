@@ -72,18 +72,6 @@ bool CUrlParts::IsAbsolutePath() const
 	return _isAbsolutePath;
 }
 
-bool CUrlParts::RemoveExtraSlashesInBeginning(std::string & url)
-{
-	std::smatch match;
-	if (std::regex_search(url, match, std::regex("^//[/]*")))
-	{
-		url.erase(url.begin(), url.begin() + match.length());
-		return true;
-	}
-	return false;
-}
-
-
 void CUrlParts::ComputeProtocol(const std::string & url, std::string & protocol)
 {
 	std::smatch match;
@@ -118,12 +106,15 @@ void CUrlParts::ComputeDomainName(const std::string & url, std::string & domainN
 		return;
 	}
 
-	std::string beforeDomainName = subDomainName.empty() ? protocol : protocol + subDomainName + "[.]";
+	std::string beforeDomainName = subDomainName.empty() ? protocol : protocol + subDomainName + ".";
+
+	size_t escapedCharacterCount = 0;
+	CUrlParts::EscapeCharacters(beforeDomainName, escapedCharacterCount);
 
 	std::smatch match;
 	if (std::regex_search(url, match, std::regex("^" + beforeDomainName + "[^/.]+[.][^/]+")))
 	{
-		domainName = match.str().substr(subDomainName.empty() ? beforeDomainName.length() : beforeDomainName.length() - 2);
+		domainName = match.str().substr(beforeDomainName.length() - escapedCharacterCount * 2);
 		if (domainName[0] == '.')
 		{
 			domainName.erase(domainName.begin());
@@ -138,18 +129,20 @@ void CUrlParts::ComputePath(const std::string & url, std::string & path, std::st
 	std::string beforePath = protocol;
 	if (!subDomainName.empty())
 	{
-		beforePath += subDomainName + "[.]";
+		beforePath += subDomainName + ".";
 	}
 	if (!domainName.empty())
 	{
 		beforePath += domainName + "/";
 	}
+	size_t escapedCharacterCount = 0;
+	CUrlParts::EscapeCharacters(beforePath, escapedCharacterCount);
 
 	std::smatch match;
 	if (std::regex_search(url, match, std::regex("^" + beforePath + ".*/")))
 	{
 		std::string matchStr = match.str();
-		size_t beforePathLength = beforePath.length() - (subDomainName.empty() ? 0 : 2);
+		size_t beforePathLength = beforePath.length() - escapedCharacterCount * 2;
 		path = matchStr.substr(beforePathLength, matchStr.length() - beforePathLength - 1);
 		if (!path.empty() && path[0] == '/')
 		{
@@ -165,7 +158,7 @@ void CUrlParts::ComputeFileName(const std::string & url, std::string & fileName,
 	std::string beforeFileName = protocol;
 	if (!subDomainName.empty())
 	{
-		beforeFileName += subDomainName + "[.]";
+		beforeFileName += subDomainName + ".";
 	}
 	if (!domainName.empty())
 	{
@@ -175,11 +168,13 @@ void CUrlParts::ComputeFileName(const std::string & url, std::string & fileName,
 	{
 		beforeFileName += path + "/";
 	}
+	size_t escapedCharacterCount = 0;
+	CUrlParts::EscapeCharacters(beforeFileName, escapedCharacterCount);
 
 	std::smatch match;
 	if (std::regex_search(url, match, std::regex("^" + beforeFileName + ".*")))
 	{
-		size_t beforeFileNameLength = beforeFileName.length() - (subDomainName.empty() ? 0 : 2);
+		size_t beforeFileNameLength = beforeFileName.length() - escapedCharacterCount * 2;
 		fileName = match.str().substr(beforeFileNameLength);
 	}
 }
@@ -203,4 +198,35 @@ void CUrlParts::CreateFullUrl(const CUrlParts & urlParts, std::string & fullUrl)
 		fullUrl += path + "/";
 	}
 	fullUrl += urlParts.GetFileName();
+}
+
+bool CUrlParts::RemoveExtraSlashesInBeginning(std::string & url)
+{
+	std::smatch match;
+	if (std::regex_search(url, match, std::regex("^//[/]*")))
+	{
+		url.erase(url.begin(), url.begin() + match.length());
+		return true;
+	}
+	return false;
+}
+
+void CUrlParts::EscapeCharacters(std::string & str, size_t & escapedCharacterCount)
+{
+	for (size_t i = 0; i < str.length(); ++i)
+	{
+		if (str[i] == '.')
+		{
+			str.insert(str.begin() + i, '[');
+			str.insert(str.begin() + i + 2, ']');
+			i += 2;
+			++escapedCharacterCount;
+		}
+		if (str[i] == '+')
+		{
+			str.insert(str.begin() + i, '\\');
+			++i;
+			++escapedCharacterCount;
+		}
+	}
 }
