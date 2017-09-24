@@ -125,10 +125,6 @@ bool ProcessUrl(
 			return;
 		}
 		CUrlParts *urlParts = new CUrlParts(url);
-		if (urlParts->GetDomainName() != currentUrlParts.GetDomainName())
-		{
-			return;
-		}
 		if (urlParts->GetProtocol().empty())
 		{
 			urlParts->SetProtocol(currentUrlParts.GetProtocol());
@@ -140,6 +136,10 @@ bool ProcessUrl(
 		if (urlParts->GetDomainName().empty())
 		{
 			urlParts->SetDomainName(currentUrlParts.GetDomainName());
+		}
+		if (urlParts->GetDomainName() != currentUrlParts.GetDomainName())
+		{
+			return;
 		}
 		string fullUrl;
 		CUrlParts::CreateFullUrl(*urlParts, fullUrl);
