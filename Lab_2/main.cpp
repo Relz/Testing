@@ -194,6 +194,8 @@ int main(int argc, char *argv[])
 	queue.push(sourceUrlParts);
 	while (!queue.empty())
 	{
+		Print(u8"Осталось обработать ссылок: ");
+		Println(to_string(queue.size()));
 		CUrlParts *currentUrlParts = queue.front();
 		queue.pop();
 		ProcessUrl(&curl, *currentUrlParts, urlsStatus, badUrls, queue, processedUrls, totalUrlCount, badUrlCount);
