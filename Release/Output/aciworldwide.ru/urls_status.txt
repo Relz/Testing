@@ -1,0 +1,12 @@
+﻿https://www.aciworldwide.ru/ : 200
+https://www.aciworldwide.ru/img/favicon.ico : 200
+https://www.aciworldwide.ru/css/normalize.css : 200
+https://www.aciworldwide.ru/css/foundation.css : 200
+https://www.aciworldwide.ru/css/app.css : 200
+https://www.aciworldwide.ru/#teamstories : 200
+https://www.aciworldwide.ru/#career_paths : 200
+https://www.aciworldwide.ru/#offices : 200
+https://www.aciworldwide.ru/img/yo.jpg : 200
+https://www.aciworldwide.ru/img/kzn.jpg : 200
+Количество ссылок: 10
+Дата/время завершения проверки: 24.9.2017/8:36:22
