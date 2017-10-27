@@ -93,7 +93,7 @@ bool ProcessUrl(
 	CUrlParts::CreateFullUrl(currentUrlParts, currentFullUrl);
 	Println(u8"----------");
 	Println(currentFullUrl);
-	Println(u8"Получение HTML кода страницы");
+	Println(u8"Получение HTML кода веб-страницы");
 	char errorBuffer[CURL_ERROR_SIZE];
 	string html;
 	if (GetHtml(curl, currentFullUrl, html, errorBuffer) != CURLE_OK)
